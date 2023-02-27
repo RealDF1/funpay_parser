@@ -11,3 +11,9 @@ Telegram Bot для реализации функции отслеживание
 Команды бота
 /start
 /stop
+
+Бибилотеки:
+requests
+aiogram
+BeautifulSoup
+lxml
