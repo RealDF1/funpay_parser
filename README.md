@@ -13,7 +13,11 @@ Telegram Bot для реализации функции отслеживание
 /stop
 
 Бибилотеки:
-requests
-aiogram
-BeautifulSoup
-lxml
+
+- requests
+
+- aiogram
+
+- BeautifulSoup
+
+- lxml
