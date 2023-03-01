@@ -1,19 +1,21 @@
+import asyncio
 from asyncio import sleep
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, CallbackQuery, InlineKeyboardMarkup, \
+    InlineKeyboardButton
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
-#from client_kb import kb_client
-from funpay_parser import site_funpay
+# from client_kb import kb_client
+from funpay_parser_asyncio import site_funpay
 
 bot_TOKEN = '6030226662:AAFwvsR7V6qmz6-5v_n24J6XUx4675EVfkE'
 
 bot = Bot(token=bot_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot=bot, storage=storage)
-stop = True
+stop = False
 
 
 class funpay_data(StatesGroup):
@@ -23,17 +25,23 @@ class funpay_data(StatesGroup):
     price = State()
 
 
+async def check_stop():
+    global stop
+    await asyncio.sleep(5)
+    return stop
+
+
 @dp.message_handler(commands='start')
 async def start_handler(message: types.Message):
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton(text="stop", callback_data="stop"))
-    await message.answer(f'Введите ссылку на страницу Funpay:', reply_markup=keyboard)
+    await message.answer(f'Введите ссылку на страницу Funpay:')
     await funpay_data.url.set()
 
 
-@dp.callback_query_handler(text="stop")
-async def send_random_value(call: types.CallbackQuery):
-    await call.message.answer('123')
+@dp.callback_query_handler(text='stop')
+async def handle_true_menu_2(callback_query: CallbackQuery):
+    global stop  # обращаемся к глобальной переменной
+    stop = True  # устанавливаем флаг
+    await bot.send_message(callback_query.from_user.id, "Остановка цикла...")
 
 
 @dp.message_handler(state=funpay_data.url)
@@ -69,17 +77,22 @@ async def get_url(message: types.Message, state: FSMContext):
     st_funpay = site_funpay(url=url, server=server, price=price, fraction=fraction)
     items_filtered_old, sorted_items = [], []
 
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.insert(InlineKeyboardButton(text="Остановить", callback_data="stop"))
     await message.answer(
-        f'Ниже цены - {price} ₽ просматриваем\nСервер - {server}\nФракция - {fraction}\n\nСтраница оферов:\n{url}')
+        f'Ниже цены - {price} ₽ просматриваем\nСервер - {server}\nФракция - {fraction}\n\nСтраница оферов:\n{url}',
+        reply_markup=keyboard)
 
-    global stop
-    while stop:
+    while True:
+        if await check_stop():
+            break
+
         if items_filtered_old:
-            temp = st_funpay.find_rechange_price(items_filtered_old=items_filtered_old)
+            temp = await st_funpay.find_rechange_price(items_filtered_old=items_filtered_old)
             items_filtered_old, sorted_items = temp[0], temp[1]
             # await sleep(15)
         else:
-            temp = st_funpay.find_rechange_price(items_filtered_old=None)
+            temp = await st_funpay.find_rechange_price(items_filtered_old=None)
             items_filtered_old = temp[0]
 
         if sorted_items:
@@ -93,7 +106,9 @@ async def get_url(message: types.Message, state: FSMContext):
                     else:
                         await message.answer(
                             f'Продавец {sorted_items[x][2]} повысил цену\n  📈 Новый прайс - {sorted_items[x][5]}\n\n{sorted_items[x][3]} ₽')
+
     await message.answer('Произошла остановка')
+
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)

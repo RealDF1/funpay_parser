@@ -1,9 +1,8 @@
 from bs4 import BeautifulSoup
-from time import sleep
 from typing import Union
 import asyncio
+import aiohttp
 import re
-import requests
 
 # Данные для теста
 url = 'https://funpay.com/chips/34/'
@@ -25,7 +24,7 @@ class site_funpay:
                           "Chrome/108.0.0.0 YaBrowser/23.1.2.987 Yowser/2.5 Safari/537.36",
         }
 
-    def __unic_list(self, list_frist, list_second):
+    async def __unic_list(self, list_frist, list_second):
         """
         [list1] - [list2]
         :param list_frist:
@@ -34,17 +33,19 @@ class site_funpay:
         """
         return [x for x in list_frist if x not in list_second]
 
-    def get_info(self):
+    async def get_info(self):
         """
         Получения вложенного списка с отфильтрованными данными, вида:
         [[item_server, item_fraction, item_nickname, item_href, item_amount, item_price], ...]
-        :return items_filtered:
+        :return:
         """
+
         # Получение верстки
-        request = requests.get(self.url, headers=self.headers)
-        if request.status_code != 200:  # Проверка статус кода запроса
-            raise Exception("request.status_code != 200, ошибка подключения")
-        all_lots = BeautifulSoup(request.text, 'lxml').find_all(class_='tc-item')
+        async with aiohttp.ClientSession() as session:
+            response = await session.get(url=self.url, headers=self.headers)
+            if response.status != 200:  # Проверка статус кода запроса
+                raise Exception("request.status_code != 200, ошибка подключения")
+            all_lots = BeautifulSoup(await response.text(), 'lxml').find_all(class_='tc-item')
 
         items_filtered = []  # Будущий отфильтрованный список
 
@@ -70,21 +71,21 @@ class site_funpay:
 
         return items_filtered  # Вывод отфильтрованных данных
 
-    def find_rechange_price(self, items_filtered_old=[]):
+    async def find_rechange_price(self, items_filtered_old=[]):
         """
         Поиск выставленной цены ниже self.price
         :param items_filtered_old:
         :return:
         """
-
-        items_filtered_new = self.get_info()  # Получение отфильтрованных данных
+        items_filtered_new = await self.get_info()  # Получение отфильтрованных данных
         items_filtered = []
 
+        #print(items_filtered_new)
         # Проверка на появление/изменение данных / Пустой ли items_filtered_old
-        if items_filtered_old is not None and items_filtered_new != items_filtered_old:
-            items_filtered = self.__unic_list(items_filtered_new, items_filtered_old)
-            items_filtered_old = self.__unic_list(items_filtered_old, items_filtered_new)
-            #print(float(items_filtered_old[0][5]), float(items_filtered[0][5]))
+        if items_filtered_old is not None and not items_filtered_new == items_filtered_old:
+            items_filtered = await self.__unic_list(items_filtered_new, items_filtered_old)
+            items_filtered_old = await self.__unic_list(items_filtered_old, items_filtered_new)
+            print(float(items_filtered_old[0][5]), float(items_filtered[0][5]))
             if float(items_filtered_old[0][5]) - float(items_filtered[0][5]) < 0:
                 return [items_filtered_new, items_filtered, False]  # Получение изменений
             return [items_filtered_new, items_filtered, True]
@@ -94,4 +95,4 @@ class site_funpay:
 
 if __name__ == '__main__':
     while True:
-        print(site_funpay(url=url, server=server, price=price, fraction=fraction).find_rechange_price())
+        asyncio.run(site_funpay(url=url, server=server, price=price, fraction=fraction).find_rechange_price())
